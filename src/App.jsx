@@ -4,266 +4,274 @@ import {
   Routes,
   Route,
   Link,
+  useNavigate,
 } from "react-router-dom";
 import "./App.css";
 
-const STORAGE_KEY = "votesecure_elections";
+const KEY = "votesecure_data";
 
-// Retrieve saved elections from localStorage
-function getElections() {
+function readData() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    return JSON.parse(localStorage.getItem(KEY)) || {
+      elections: [],
+      votes: {},
+    };
   } catch {
-    return [];
+    return { elections: [], votes: {} };
   }
 }
 
-// Save elections to localStorage
-function saveElections(elections) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(elections));
+function saveData(data) {
+  localStorage.setItem(KEY, JSON.stringify(data));
 }
 
-// Home Page
 function Home() {
   return (
-    <section className="hero">
-      <h1>Every Vote Matters</h1>
+    <main className="hero">
+      <span className="eyebrow">SECURE DIGITAL ELECTIONS</span>
+      <h1>Every vote matters</h1>
       <p>A simple and transparent online voting platform.</p>
-
-      <div>
-        <Link to="/voter" className="btn">
-          Voter Portal
-        </Link>
-
-        <Link to="/admin" className="btn">
-          Admin Portal
-        </Link>
+      <div className="actions">
+        <Link className="btn" to="/voter">Voter portal</Link>
+        <Link className="btn secondary" to="/admin">Admin portal</Link>
       </div>
-    </section>
+    </main>
   );
 }
 
-// Admin Dashboard
-function AdminDashboard() {
-  const [elections, setElections] = useState(getElections);
+function Admin() {
+  const [data, setData] = useState(readData);
   const [title, setTitle] = useState("");
-  const [candidates, setCandidates] = useState("");
+  const [names, setNames] = useState("");
   const [message, setMessage] = useState("");
 
   function createElection(event) {
     event.preventDefault();
 
-    const candidateList = candidates
+    const candidates = names
       .split(",")
       .map((name) => name.trim())
       .filter(Boolean);
 
-    if (!title.trim()) {
-      setMessage("Please enter an election name.");
-      return;
-    }
-
-    if (candidateList.length < 2) {
+    if (candidates.length < 2) {
       setMessage("Add at least two candidates.");
       return;
     }
 
-    const newElection = {
-      id: Date.now(),
-      title: title.trim(),
-      candidates: candidateList.map((name, index) => ({
-        id: index + 1,
-        name,
-      })),
-      votes: {},
+    const updated = {
+      ...data,
+      elections: [
+        ...data.elections,
+        {
+          id: Date.now().toString(),
+          title: title.trim(),
+          candidates: candidates.map((name, i) => ({
+            id: `${Date.now()}-${i}`,
+            name,
+          })),
+        },
+      ],
     };
 
-    const updated = [...elections, newElection];
-
-    saveElections(updated);
-    setElections(updated);
-
+    saveData(updated);
+    setData(updated);
     setTitle("");
-    setCandidates("");
-    setMessage("Election created and saved successfully!");
+    setNames("");
+    setMessage("Election created successfully.");
   }
 
   function deleteElection(id) {
-    const updated = elections.filter(
-      (election) => election.id !== id
-    );
+    const updated = {
+      ...data,
+      elections: data.elections.filter((e) => e.id !== id),
+    };
 
-    saveElections(updated);
-    setElections(updated);
-    setMessage("Election deleted.");
+    saveData(updated);
+    setData(updated);
   }
 
   return (
-    <section className="content">
-      <h1>Admin Dashboard</h1>
-      <p>Create and manage elections.</p>
+    <main className="page">
+      <div className="page-heading">
+        <span className="eyebrow">ADMINISTRATION</span>
+        <h1>Admin dashboard</h1>
+        <p>Create elections and manage candidates.</p>
+      </div>
 
-      <div className="card">
-        <h2>Create Election</h2>
-
+      <section className="card">
+        <h2>Create an election</h2>
         <form onSubmit={createElection}>
-          <label>Election Name</label>
-
+          <label htmlFor="title">Election name</label>
           <input
-            type="text"
+            id="title"
             required
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(e) => setTitle(e.target.value)}
             placeholder="Student Council Election"
           />
 
-          <label>Candidate Names</label>
-
+          <label htmlFor="candidates">Candidate names</label>
           <textarea
+            id="candidates"
             required
             rows="3"
-            value={candidates}
-            onChange={(event) => setCandidates(event.target.value)}
-            placeholder="Aarav Sharma, Meera Reddy, Rahul Kumar"
+            value={names}
+            onChange={(e) => setNames(e.target.value)}
+            placeholder="Aarav Sharma, Meera Reddy"
           />
 
-          <p className="hint">
-            Separate candidate names using commas.
-          </p>
-
-          <button className="btn" type="submit">
-            Create Election
-          </button>
+          <p className="hint">Separate names with commas.</p>
+          <button className="btn" type="submit">Create election</button>
         </form>
+        {message && <p className="message">{message}</p>}
+      </section>
 
-        {message && <p>{message}</p>}
+      <section className="section">
+        <h2>Saved elections ({data.elections.length})</h2>
+
+        {data.elections.map((election) => (
+          <article className="card" key={election.id}>
+            <h3>{election.title}</h3>
+            <p>{election.candidates.length} candidates</p>
+            <ul>
+              {election.candidates.map((candidate) => (
+                <li key={candidate.id}>{candidate.name}</li>
+              ))}
+            </ul>
+            <button
+              className="btn danger"
+              onClick={() => deleteElection(election.id)}
+            >
+              Delete election
+            </button>
+          </article>
+        ))}
+
+        {data.elections.length === 0 && (
+          <p className="empty">No elections created yet.</p>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function Voter() {
+  const [data, setData] = useState(readData);
+  const [search, setSearch] = useState("");
+  const [voterId, setVoterId] = useState("");
+  const [message, setMessage] = useState("");
+
+  const elections = data.elections.filter((election) => {
+    const text = [
+      election.title,
+      ...election.candidates.map((candidate) => candidate.name),
+    ].join(" ").toLowerCase();
+
+    return text.includes(search.toLowerCase());
+  });
+
+  function castVote(electionId, candidateId) {
+    if (!voterId.trim()) {
+      setMessage("Enter your voter ID before voting.");
+      return;
+    }
+
+    const voteKey = `${electionId}-${voterId.trim().toLowerCase()}`;
+
+    if (data.votes[voteKey]) {
+      setMessage("This demo voter has already voted in this election.");
+      return;
+    }
+
+    const updated = {
+      ...data,
+      votes: {
+        ...data.votes,
+        [voteKey]: candidateId,
+      },
+    };
+
+    saveData(updated);
+    setData(updated);
+    setMessage("Demo vote recorded.");
+  }
+
+  return (
+    <main className="page">
+      <div className="page-heading">
+        <span className="eyebrow">VOTER PORTAL</span>
+        <h1>Available elections</h1>
+        <p>Find an election and review its candidates.</p>
       </div>
 
-      <h2>Saved Elections ({elections.length})</h2>
+      <section className="card">
+        <label htmlFor="voterId">Demo voter ID</label>
+        <input
+          id="voterId"
+          value={voterId}
+          onChange={(e) => setVoterId(e.target.value)}
+          placeholder="Enter a voter ID"
+        />
+
+        <label htmlFor="search">Search elections or candidates</label>
+        <input
+          id="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search..."
+        />
+      </section>
+
+      {message && <p className="message">{message}</p>}
 
       {elections.map((election) => (
-        <div className="card" key={election.id}>
-          <h3>{election.title}</h3>
+        <section className="card election" key={election.id}>
+          <h2>{election.title}</h2>
+          <p>Select a candidate to cast your demo vote.</p>
 
-          <p>
-            {election.candidates.length} candidates
-          </p>
-
-          <ul>
-            {election.candidates.map((candidate) => (
-              <li key={candidate.id}>
-                {candidate.name}
-              </li>
-            ))}
-          </ul>
-
-          <button
-            className="btn danger"
-            onClick={() => deleteElection(election.id)}
-          >
-            Delete Election
-          </button>
-        </div>
+          {election.candidates.map((candidate) => (
+            <div className="candidate" key={candidate.id}>
+              <span>{candidate.name}</span>
+              <button
+                className="btn"
+                onClick={() => castVote(election.id, candidate.id)}
+              >
+                Vote
+              </button>
+            </div>
+          ))}
+        </section>
       ))}
 
       {elections.length === 0 && (
-        <p>No elections created yet.</p>
+        <p className="empty">No matching elections found.</p>
       )}
-    </section>
+    </main>
   );
 }
 
-// Voter Dashboard
-function VoterDashboard() {
-  const [elections] = useState(getElections);
-  const [search, setSearch] = useState("");
-
-  const filteredElections = elections.filter((election) => {
-    const searchableText = [
-      election.title,
-      ...election.candidates.map((candidate) => candidate.name),
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    return searchableText.includes(search.toLowerCase());
-  });
-
-  return (
-    <section className="content">
-      <h1>Voter Dashboard</h1>
-
-      <p>View elections and retrieve candidate information.</p>
-
-      <input
-        className="search-input"
-        type="text"
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search elections or candidates..."
-      />
-
-      {filteredElections.map((election) => (
-        <div className="card" key={election.id}>
-          <h2>{election.title}</h2>
-
-          <h3>Candidates</h3>
-
-          <ul>
-            {election.candidates.map((candidate) => (
-              <li key={candidate.id}>
-                {candidate.name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-
-      {filteredElections.length === 0 && (
-        <p>No matching elections found.</p>
-      )}
-    </section>
-  );
-}
-
-// Main Application
 function App() {
   return (
     <HashRouter>
       <div className="app">
-        <nav className="navbar">
-          <Link to="/" className="brand">
-            VoteSecure
-          </Link>
-
-          <div>
-            <Link to="/" className="nav-link">
-              Home
-            </Link>
-
-            <Link to="/voter" className="nav-link">
-              Voter
-            </Link>
-
-            <Link to="/admin" className="nav-link">
-              Admin
-            </Link>
-          </div>
-        </nav>
+        <header className="navbar">
+          <Link to="/" className="brand">VoteSecure</Link>
+          <nav>
+            <Link to="/">Home</Link>
+            <Link to="/voter">Voter</Link>
+            <Link to="/admin">Admin</Link>
+          </nav>
+        </header>
 
         <Routes>
           <Route path="/" element={<Home />} />
-
-          <Route
-            path="/voter"
-            element={<VoterDashboard />}
-          />
-
-          <Route
-            path="/admin"
-            element={<AdminDashboard />}
-          />
+          <Route path="/voter" element={<Voter />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
+
+        <footer className="footer">
+          VoteSecure · Hackathon demo
+        </footer>
       </div>
     </HashRouter>
   );
